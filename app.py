@@ -1824,20 +1824,19 @@ def preview():
         )
 
 
-        qualities = (
-    get_quality_options(
-        info
-    )
+                qualities = (
+            get_quality_options(
+                info
+            )
         )
 
-        
-         best_info = get_best_video_info(
-             info
-         )
+        best_info = get_best_video_info(
+            info
+        )
 
-          mp3_size = get_mp3_estimated_size(
-              info
-         )
+        mp3_size = get_mp3_estimated_size(
+            info
+        )
 
         track = (
             info.get("track")
