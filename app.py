@@ -6,6 +6,7 @@ import sys
 import json
 import shutil
 import re
+import base64
 from urllib.parse import urlparse
 from curl_cffi import requests as curl_requests
 from html import unescape
@@ -142,6 +143,138 @@ def select_thumbnail(info):
 
     return info.get("thumbnail") or ""
 
+
+def get_profile_picture(video_url, info):
+
+    uploader = info.get("uploader")
+
+    profile_url = info.get("uploader_url")
+
+    urls_to_try = [
+        video_url,
+        profile_url
+    ]
+
+    if uploader:
+        urls_to_try.append(
+            f"https://www.tiktok.com/@{uploader}"
+        )
+
+    patterns = [
+        r'"avatarLarger"\s*:\s*"([^"]+)"',
+        r'"avatarMedium"\s*:\s*"([^"]+)"',
+        r'"avatarThumb"\s*:\s*"([^"]+)"',
+        r'"avatar_larger".*?"url_list"\s*:\s*\[\s*"([^"]+)"',
+        r'"avatar_medium".*?"url_list"\s*:\s*\[\s*"([^"]+)"',
+        r'"avatar_thumb".*?"url_list"\s*:\s*\[\s*"([^"]+)"'
+    ]
+
+    for page_url in urls_to_try:
+
+        if not page_url:
+            continue
+
+        try:
+
+            response = curl_requests.get(
+                page_url,
+                impersonate="chrome",
+                timeout=20,
+                allow_redirects=True
+            )
+
+            if response.status_code != 200:
+                continue
+
+            html = response.text
+
+            for pattern in patterns:
+
+                match = re.search(
+                    pattern,
+                    html,
+                    re.DOTALL
+                )
+
+                if not match:
+                    continue
+
+                raw_url = match.group(1)
+
+                try:
+                    avatar_url = json.loads(
+                        '"' + raw_url + '"'
+                    )
+
+                except Exception:
+                    avatar_url = (
+                        raw_url
+                        .replace(r"\u002F", "/")
+                        .replace(r"\/", "/")
+                        .replace(r"\u0026", "&")
+                    )
+
+                if avatar_url.startswith("http"):
+
+                    print(
+                        "Avatar ditemukan:",
+                        uploader
+                    )
+
+                    return avatar_url
+
+        except Exception as e:
+
+            print(
+                "Avatar fetch error:",
+                e
+            )
+
+    return ""
+
+
+def avatar_to_data_url(avatar_url):
+
+    if not avatar_url:
+        return ""
+
+    try:
+
+        response = curl_requests.get(
+            avatar_url,
+            impersonate="chrome",
+            timeout=20,
+            allow_redirects=True
+        )
+
+        if response.status_code != 200:
+            return ""
+
+        content_type = response.headers.get(
+            "content-type",
+            "image/jpeg"
+        )
+
+        if not content_type.startswith("image/"):
+            return ""
+
+        encoded = base64.b64encode(
+            response.content
+        ).decode("utf-8")
+
+        return (
+            f"data:{content_type};base64,{encoded}"
+        )
+
+    except Exception as e:
+
+        print(
+            "Avatar encode error:",
+            e
+        )
+
+        return ""
+        
 
 def get_available_resolutions(info):
     """
@@ -656,30 +789,19 @@ button:disabled {
     margin-top: 18px;
 }
 
-.avatar {
+.avatar-img {
     width: 43px;
     height: 43px;
 
     flex-shrink: 0;
 
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
     border-radius: 50%;
+
     object-fit: cover;
 
-    font-weight: 800;
-    font-size: 18px;
+    display: block;
 
-    background:
-        linear-gradient(
-            135deg,
-            #25f4ee,
-            #fe2c55
-        );
-
-    color: white;
+    border: 1px solid #333;
 }
 
 .creator-name {
@@ -1382,7 +1504,17 @@ def preview():
             or "TikTok User"
         )
 
+        
+        avatar_url = get_profile_picture(
+            url,
+            info
+        )
 
+        avatar_data = avatar_to_data_url(
+            avatar_url
+        )
+
+    
         creator_name = (
             info.get("channel")
             or info.get("creator")
@@ -1520,9 +1652,21 @@ def preview():
 
 {% else %}
 
+{% if avatar_data %}
+
+<img
+    class="avatar-img"
+    src="{{ avatar_data }}"
+    alt="Foto profil {{ uploader }}"
+>
+
+{% else %}
+
 <div class="avatar">
     {{ avatar }}
 </div>
+
+{% endif %}
 
 {% endif %}
 
@@ -1835,6 +1979,7 @@ document
             creator=creator_name,
             uploader=uploader,
             avatar=avatar_letter,
+            avatar_data=avatar_data,
 
             caption=caption,
 
