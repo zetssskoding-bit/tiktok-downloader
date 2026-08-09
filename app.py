@@ -2084,7 +2084,7 @@ def preview():
         <button
             class="
                 download-btn
-                video-btn
+                best-btn
             "
             type="submit"
         >
