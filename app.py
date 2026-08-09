@@ -7,6 +7,8 @@ import json
 import shutil
 import re
 from urllib.parse import urlparse
+from curl_cffi import requests as curl_requests
+from html import unescape
 
 
 app = Flask(__name__)
@@ -192,6 +194,81 @@ def get_available_resolutions(info):
         resolutions,
         reverse=True
     )[:8]
+    
+
+def get_profile_picture(info):
+
+    profile_url = info.get("uploader_url")
+
+    uploader = info.get("uploader")
+
+    if not profile_url and uploader:
+        profile_url = (
+            f"https://www.tiktok.com/@{uploader}"
+        )
+
+    if not profile_url:
+        return ""
+
+    try:
+
+        response = curl_requests.get(
+            profile_url,
+            impersonate="chrome",
+            timeout=15
+        )
+
+        if response.status_code != 200:
+            return ""
+
+        html = response.text
+
+        patterns = [
+
+            r'"avatarLarger":"([^"]+)"',
+
+            r'"avatarMedium":"([^"]+)"',
+
+            r'"avatarThumb":"([^"]+)"',
+
+            r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)'
+        ]
+
+        for pattern in patterns:
+
+            match = re.search(
+                pattern,
+                html
+            )
+
+            if match:
+
+                avatar_url = match.group(1)
+
+                avatar_url = (
+                    avatar_url
+                    .replace(
+                        r"\u002F",
+                        "/"
+                    )
+                    .replace(
+                        r"\/",
+                        "/"
+                    )
+                )
+
+                return unescape(
+                    avatar_url
+                )
+
+    except Exception as e:
+
+        print(
+            "Avatar error:",
+            e
+        )
+
+    return ""
 
 
 def extract_info(url):
@@ -542,8 +619,8 @@ button:disabled {
 }
 
 .avatar {
-    width: 45px;
-    height: 45px;
+    width: 43px;
+    height: 43px;
 
     flex-shrink: 0;
 
@@ -552,6 +629,10 @@ button:disabled {
     justify-content: center;
 
     border-radius: 50%;
+    object-fit: cover;
+
+    font-weight: 800;
+    font-size: 18px;
 
     background:
         linear-gradient(
@@ -560,8 +641,7 @@ button:disabled {
             #fe2c55
         );
 
-    font-size: 18px;
-    font-weight: 800;
+    color: white;
 }
 
 .creator-name {
@@ -1282,6 +1362,11 @@ def preview():
         thumbnail = select_thumbnail(
             info
         )
+        
+
+        avatar_url = get_profile_picture(
+            info
+        )
 
 
         duration = format_duration(
@@ -1385,9 +1470,22 @@ def preview():
 
         <div class="creator-row">
 
-            <div class="avatar">
-                {{ avatar }}
-            </div>
+            {% if avatar_url %}
+
+<img
+    class="avatar"
+    src="{{ avatar_url }}"
+    alt="{{ uploader }}"
+    referrerpolicy="no-referrer"
+>
+
+{% else %}
+
+<div class="avatar">
+    {{ avatar }}
+</div>
+
+{% endif %}
 
 
             <div>
