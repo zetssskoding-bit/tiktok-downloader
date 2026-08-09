@@ -444,12 +444,143 @@ def get_quality_options(info):
 
 
         options.append({
-            "resolution": resolution,
-            "size": format_filesize(size)
-        })
+    "resolution": resolution,
+    "size": format_filesize(size),
+    "badge": get_quality_badge(
+        resolution
+    )
+})
 
 
     return options
+
+
+def get_quality_badge(resolution):
+
+    try:
+        resolution = int(resolution)
+    except:
+        return ""
+
+    if resolution >= 2160:
+        return "4K"
+
+    if resolution >= 1440:
+        return "QHD"
+
+    if resolution >= 1080:
+        return "FHD"
+
+    if resolution >= 720:
+        return "HD"
+
+    if resolution >= 480:
+        return "SD"
+
+    return "LOW"
+
+
+def get_best_video_info(info):
+
+    candidates = []
+
+    for fmt in info.get("formats") or []:
+
+        if fmt.get("vcodec") in (
+            None,
+            "none"
+        ):
+            continue
+
+        if fmt.get("acodec") in (
+            None,
+            "none"
+        ):
+            continue
+
+        width = fmt.get("width")
+        height = fmt.get("height")
+
+        if not width or not height:
+            continue
+
+        try:
+            resolution = min(
+                int(width),
+                int(height)
+            )
+        except:
+            continue
+
+        size = (
+            fmt.get("filesize")
+            or fmt.get("filesize_approx")
+        )
+
+        duration = info.get("duration") or 0
+
+        if (
+            not size
+            and duration
+            and fmt.get("tbr")
+        ):
+            size = (
+                fmt.get("tbr")
+                * 1000
+                * duration
+                / 8
+            )
+
+        candidates.append({
+            "resolution": resolution,
+            "size_raw": size,
+            "tbr": fmt.get("tbr") or 0
+        })
+
+    if not candidates:
+
+        return {
+            "size": "Ukuran tidak tersedia",
+            "badge": "BEST"
+        }
+
+    candidates.sort(
+        key=lambda item: (
+            item["resolution"],
+            item["tbr"]
+        ),
+        reverse=True
+    )
+
+    best = candidates[0]
+
+    return {
+        "size": format_filesize(
+            best["size_raw"]
+        ),
+        "badge": get_quality_badge(
+            best["resolution"]
+        )
+    }
+
+
+def get_mp3_estimated_size(info):
+
+    duration = info.get("duration")
+
+    if not duration:
+        return "Ukuran tidak tersedia"
+
+    # Estimasi MP3 VBR kualitas tinggi
+    estimated_bitrate = 245000
+
+    size = (
+        estimated_bitrate
+        * float(duration)
+        / 8
+    )
+
+    return format_filesize(size)
     
 
 def get_profile_picture(video_url, info):
@@ -1699,6 +1830,14 @@ def preview():
     )
         )
 
+        
+         best_info = get_best_video_info(
+             info
+         )
+
+          mp3_size = get_mp3_estimated_size(
+              info
+         )
 
         track = (
             info.get("track")
@@ -1934,9 +2073,15 @@ def preview():
                 >
                     Best
 
-                    <span class="small">
-                        Kualitas tertinggi
-                    </span>
+                    {{ quality.resolution }}p
+
+{% if quality.badge %}
+    · {{ quality.badge }}
+{% endif %}
+
+<span class="small">
+    {{ quality.size }}
+</span>
 
                 </button>
 
@@ -1964,22 +2109,23 @@ def preview():
     >
 
     <button
-        class="
-            download-btn
-            quality-btn
-        "
-        type="submit"
-    >
+    class="
+        download-btn
+        video-btn
+    "
+    type="submit"
+>
 
-        {{ quality.resolution }}p
+    Best
+    {% if best_info.badge %}
+        · {{ best_info.badge }}
+    {% endif %}
 
-        <span class="small">
-            {{ quality.size }}
-        </span>
+    <span class="small">
+        {{ best_info.size }}
+    </span>
 
-    </button>
-
-</form>
+</button>
 
 {% endfor %}
 
@@ -2008,9 +2154,11 @@ def preview():
             >
                 Download MP3
 
-                <span class="small">
-                    Audio only
-                </span>
+                Download MP3
+
+<span class="small">
+    {{ mp3_size }} · Audio only
+</span>
 
             </button>
 
@@ -2114,6 +2262,8 @@ document
             saves=save_count,
 
             qualities=qualities,
+            best_info=best_info,
+            mp3_size=mp3_size,
 
             duration=duration,
 
