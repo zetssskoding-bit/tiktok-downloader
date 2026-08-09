@@ -5,10 +5,15 @@ import os
 import sys
 import json
 import shutil
+import re
 from urllib.parse import urlparse
 
 app = Flask(__name__)
 
+
+# =========================
+# HELPERS
+# =========================
 
 def valid_tiktok_url(url):
     try:
@@ -28,167 +33,665 @@ def valid_tiktok_url(url):
         return False
 
 
-BASE_STYLE = """
+def format_number(number):
+    if number is None:
+        return "-"
+
+    try:
+        number = int(number)
+
+        if number >= 1_000_000_000:
+            return f"{number / 1_000_000_000:.1f}B".replace(".0B", "B")
+
+        if number >= 1_000_000:
+            return f"{number / 1_000_000:.1f}M".replace(".0M", "M")
+
+        if number >= 1_000:
+            return f"{number / 1_000:.1f}K".replace(".0K", "K")
+
+        return str(number)
+
+    except Exception:
+        return "-"
+
+
+def format_duration(duration):
+    if not duration:
+        return "-"
+
+    duration = int(duration)
+
+    minutes = duration // 60
+    seconds = duration % 60
+
+    if minutes >= 60:
+        hours = minutes // 60
+        minutes = minutes % 60
+
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+    return f"{minutes}:{seconds:02d}"
+
+
+def safe_filename(text):
+    text = re.sub(
+        r"[^a-zA-Z0-9_-]+",
+        "-",
+        text
+    )
+
+    text = text.strip("-")
+
+    return text[:45] or "tiktok"
+
+
+def select_thumbnail(info):
+
+    thumbnails = info.get("thumbnails") or []
+
+    # Prioritas cover statis TikTok.
+    priorities = [
+        "cover",
+        "origin_cover",
+        "originCover",
+        "thumbnail"
+    ]
+
+    for wanted_id in priorities:
+
+        for item in thumbnails:
+
+            if (
+                item.get("id") == wanted_id
+                and item.get("url")
+            ):
+                return item["url"]
+
+    # Hindari dynamic/animated kalau memungkinkan.
+    static_items = [
+        item for item in thumbnails
+        if item.get("url")
+        and "dynamic" not in str(
+            item.get("id", "")
+        ).lower()
+        and "animated" not in str(
+            item.get("id", "")
+        ).lower()
+    ]
+
+    if static_items:
+        return static_items[-1]["url"]
+
+    return info.get("thumbnail") or ""
+
+
+def extract_info(url):
+
+    command = [
+        sys.executable,
+        "-m",
+        "yt_dlp",
+
+        "--dump-single-json",
+        "--skip-download",
+        "--no-playlist",
+
+        "--impersonate",
+        "chrome",
+
+        url
+    ]
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=70
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            result.stderr[-2000:]
+        )
+
+    return json.loads(
+        result.stdout
+    )
+
+
+# =========================
+# STYLE
+# =========================
+
+STYLE = """
 <style>
+
+:root {
+    --bg: #090909;
+    --card: #171717;
+    --soft: #222;
+    --border: #2b2b2b;
+    --primary: #ff2d55;
+    --primary2: #ff174c;
+    --text: #ffffff;
+    --muted: #999;
+}
 
 * {
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
     margin: 0;
     min-height: 100vh;
+    color: var(--text);
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
     background:
-        radial-gradient(circle at top, #252525 0%, #111 45%, #080808 100%);
-    color: white;
-    font-family: Arial, sans-serif;
+        radial-gradient(
+            circle at 50% -10%,
+            #262626,
+            #0d0d0d 38%,
+            #050505 80%
+        );
+
     padding: 22px;
 }
 
-.wrapper {
+.container {
     width: 100%;
     max-width: 460px;
-    margin: 60px auto;
+    margin: 42px auto;
 }
 
-.logo {
+.brand {
     text-align: center;
-    font-size: 46px;
-    margin-bottom: 5px;
-}
-
-h1 {
-    text-align: center;
-    font-size: 32px;
-    margin: 5px 0 10px;
-}
-
-.subtitle {
-    text-align: center;
-    color: #999;
-    line-height: 1.5;
     margin-bottom: 30px;
 }
 
+.brand-icon {
+    width: 62px;
+    height: 62px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    margin: 0 auto 15px;
+
+    border-radius: 20px;
+
+    font-size: 31px;
+    font-weight: bold;
+
+    background:
+        linear-gradient(
+            135deg,
+            #25f4ee,
+            #111 45%,
+            #fe2c55
+        );
+
+    box-shadow:
+        0 13px 35px
+        rgba(254,44,85,.18);
+}
+
+h1 {
+    font-size: 29px;
+    margin: 0;
+}
+
+.subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.55;
+    margin-top: 9px;
+}
+
 .card {
-    background: rgba(28, 28, 28, .95);
-    border: 1px solid #2d2d2d;
-    border-radius: 22px;
-    padding: 22px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 25px;
+
+    background:
+        rgba(24,24,24,.96);
+
+    box-shadow:
+        0 22px 70px
+        rgba(0,0,0,.35);
 }
 
-input {
-    width: 100%;
-    padding: 17px;
-    border-radius: 13px;
-    border: 1px solid #393939;
-    background: #242424;
-    color: white;
-    font-size: 15px;
+.input-wrap {
+    display: flex;
+    gap: 8px;
+
+    padding: 6px;
+
+    background: #222;
+    border: 1px solid #333;
+    border-radius: 15px;
+}
+
+.url-input {
+    min-width: 0;
+    flex: 1;
+
+    background: transparent;
+    border: 0;
     outline: none;
+
+    padding: 12px;
+
+    color: white;
+    font-size: 14px;
 }
 
-input:focus {
-    border-color: #fe2c55;
+.paste-btn {
+    width: auto;
+    min-width: 76px;
+
+    margin: 0;
+    padding: 11px 12px;
+
+    background: #333;
+    border-radius: 11px;
+
+    font-size: 13px;
 }
 
 button {
-    width: 100%;
-    margin-top: 12px;
-    padding: 17px;
-    border: none;
-    border-radius: 13px;
-    background: #fe2c55;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
+    border: 0;
     cursor: pointer;
+
+    color: white;
+
+    font-weight: 700;
+    font-size: 15px;
+
+    transition: .15s;
 }
 
 button:active {
     transform: scale(.98);
 }
 
-.thumbnail {
+.primary-btn {
     width: 100%;
-    max-height: 500px;
-    object-fit: cover;
-    border-radius: 17px;
-    background: #222;
+    margin-top: 12px;
+    padding: 16px;
+
+    border-radius: 14px;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary),
+            var(--primary2)
+        );
+
+    box-shadow:
+        0 9px 24px
+        rgba(254,44,85,.18);
 }
 
-.info {
-    margin-top: 18px;
+.cover {
+    width: 100%;
+    aspect-ratio: 9 / 12;
+
+    object-fit: cover;
+
+    display: block;
+
+    border-radius: 18px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #181818,
+            #080808
+        );
+}
+
+.creator-row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+
+    margin-top: 17px;
+}
+
+.avatar {
+    width: 43px;
+    height: 43px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    font-weight: 800;
+    font-size: 18px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #25f4ee,
+            #fe2c55
+        );
+
+    color: white;
+}
+
+.creator-name {
+    font-weight: 700;
+    color: white;
 }
 
 .username {
-    color: #fe2c55;
-    font-weight: bold;
-    font-size: 15px;
+    margin-top: 2px;
+    color: var(--primary);
+    font-size: 13px;
 }
 
 .caption {
-    margin-top: 8px;
-    line-height: 1.5;
+    margin-top: 15px;
+
+    color: #eee;
+    font-size: 15px;
+    line-height: 1.55;
+
+    word-break: break-word;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    margin-top: 18px;
+    overflow: hidden;
+
+    border: 1px solid #292929;
+    border-radius: 15px;
+
+    background: #202020;
+}
+
+.stat {
+    padding: 13px 4px;
+    text-align: center;
+
+    border-right:
+        1px solid #2d2d2d;
+}
+
+.stat:last-child {
+    border-right: none;
+}
+
+.stat-value {
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.stat-label {
+    font-size: 10px;
+    color: #888;
+    margin-top: 5px;
+}
+
+.meta-box {
+    margin-top: 13px;
+    padding: 13px;
+
+    border-radius: 14px;
+
+    background: #202020;
+
+    font-size: 12px;
+    line-height: 1.6;
+
+    color: #aaa;
+}
+
+.meta-box strong {
     color: #eee;
 }
 
-.meta {
-    margin-top: 12px;
-    color: #888;
-    font-size: 13px;
+.download-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+
+    gap: 10px;
+
+    margin-top: 14px;
+}
+
+.download-btn {
+    width: 100%;
+    padding: 15px 8px;
+
+    border-radius: 14px;
+}
+
+.video-btn {
+    background:
+        linear-gradient(
+            135deg,
+            #fe2c55,
+            #ff174c
+        );
+}
+
+.audio-btn {
+    background:
+        #2b2b2b;
+
+    border:
+        1px solid #3c3c3c;
+}
+
+.small {
+    display: block;
+
+    margin-top: 3px;
+
+    font-size: 10px;
+    font-weight: 400;
+
+    opacity: .75;
 }
 
 .back {
     display: block;
+
     text-align: center;
-    color: #aaa;
     text-decoration: none;
-    margin-top: 18px;
-}
 
-.error {
-    text-align: center;
-}
+    color: #999;
 
-.error h2 {
-    color: #fe2c55;
-}
+    margin: 20px 0 5px;
 
-.loading {
-    display: none;
-    margin-top: 20px;
-    text-align: center;
-    color: #aaa;
-}
-
-.spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #333;
-    border-top: 3px solid #fe2c55;
-    border-radius: 50%;
-    margin: 0 auto 12px;
-
-    animation: spin .8s linear infinite;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
+    font-size: 14px;
 }
 
 .footer {
+    margin-top: 24px;
+
     text-align: center;
-    margin-top: 25px;
+
+    font-size: 11px;
+    line-height: 1.5;
+
     color: #555;
+}
+
+.error-card {
+    text-align: center;
+}
+
+.error-icon {
+    font-size: 42px;
+}
+
+.error-title {
+    font-size: 22px;
+    margin: 12px 0 8px;
+}
+
+.error-text {
+    color: #999;
+    line-height: 1.6;
+}
+
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+
+    display: none;
+
+    align-items: center;
+    justify-content: center;
+
+    background:
+        rgba(0,0,0,.82);
+
+    backdrop-filter:
+        blur(7px);
+
+    z-index: 999;
+}
+
+.loading-card {
+    width: 80%;
+    max-width: 300px;
+
+    text-align: center;
+
+    padding: 28px;
+
+    border:
+        1px solid #333;
+
+    border-radius: 22px;
+
+    background: #181818;
+}
+
+.spinner {
+    width: 42px;
+    height: 42px;
+
+    margin:
+        0 auto 16px;
+
+    border:
+        4px solid #333;
+
+    border-top-color:
+        var(--primary);
+
+    border-radius: 50%;
+
+    animation:
+        rotate .75s
+        linear infinite;
+}
+
+.loading-title {
+    font-weight: bold;
+}
+
+.loading-text {
+    margin-top: 7px;
+
+    color: #888;
     font-size: 12px;
+}
+
+@keyframes rotate {
+    to {
+        transform:
+            rotate(360deg);
+    }
+}
+
+@media (
+    max-width: 390px
+) {
+
+    body {
+        padding: 14px;
+    }
+
+    .container {
+        margin: 28px auto;
+    }
+
+    .card {
+        padding: 15px;
+    }
+
+    .stats {
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+
+    .stat:nth-child(2) {
+        border-right: 0;
+    }
+
+    .stat:nth-child(-n+2) {
+        border-bottom:
+            1px solid #2d2d2d;
+    }
 }
 
 </style>
 """
 
+
+LOADING = """
+<div
+    id="loading"
+    class="loading-overlay"
+>
+
+    <div class="loading-card">
+
+        <div class="spinner"></div>
+
+        <div
+            id="loadingTitle"
+            class="loading-title"
+        >
+            Memproses...
+        </div>
+
+        <div
+            id="loadingText"
+            class="loading-text"
+        >
+            Sebentar ya.
+        </div>
+
+    </div>
+
+</div>
+"""
+
+
+# =========================
+# HOME
+# =========================
 
 @app.route("/")
 def home():
@@ -203,8 +706,10 @@ def home():
 <meta charset="UTF-8">
 
 <meta
-name="viewport"
-content="width=device-width, initial-scale=1.0">
+    name="viewport"
+    content="width=device-width,
+    initial-scale=1.0"
+>
 
 <title>TikTok Downloader</title>
 
@@ -212,22 +717,28 @@ content="width=device-width, initial-scale=1.0">
 
 </head>
 
+
 <body>
 
-<div class="wrapper">
+<div class="container">
 
-    <div class="logo">
-        ♪
+    <div class="brand">
+
+        <div class="brand-icon">
+            ♪
+        </div>
+
+        <h1>
+            TikTok Downloader
+        </h1>
+
+        <div class="subtitle">
+            Preview video dan download
+            TikTok dengan cepat.
+        </div>
+
     </div>
 
-    <h1>
-        TikTok Downloader
-    </h1>
-
-    <div class="subtitle">
-        Paste link TikTok untuk melihat preview
-        lalu download videonya.
-    </div>
 
     <div class="card">
 
@@ -237,60 +748,115 @@ content="width=device-width, initial-scale=1.0">
             method="POST"
         >
 
-            <input
-                type="url"
-                name="url"
-                placeholder="Paste link TikTok di sini..."
-                required
-            >
+            <div class="input-wrap">
 
-            <button type="submit">
+                <input
+                    id="urlInput"
+                    class="url-input"
+                    type="url"
+                    name="url"
+                    placeholder="Paste link TikTok..."
+                    required
+                >
+
+                <button
+                    type="button"
+                    class="paste-btn"
+                    onclick="pasteLink()"
+                >
+                    Paste
+                </button>
+
+            </div>
+
+
+            <button
+                class="primary-btn"
+                type="submit"
+            >
                 Preview Video
             </button>
 
         </form>
 
-        <div
-            id="loading"
-            class="loading"
-        >
-
-            <div class="spinner"></div>
-
-            Mengambil informasi video...
-
-        </div>
-
     </div>
 
+
     <div class="footer">
-        Gunakan hanya untuk konten yang kamu punya
-        izin untuk mengunduh.
+        Gunakan hanya untuk konten
+        yang kamu punya hak atau izin
+        untuk mengunduh.
     </div>
 
 </div>
 
 
+{{ loading|safe }}
+
+
 <script>
 
-const form =
-    document.getElementById("previewForm");
+async function pasteLink() {
 
-form.addEventListener(
+    try {
+
+        const text =
+            await navigator
+            .clipboard
+            .readText();
+
+        document
+            .getElementById(
+                "urlInput"
+            )
+            .value = text;
+
+    } catch (error) {
+
+        const input =
+            document.getElementById(
+                "urlInput"
+            );
+
+        input.focus();
+
+        alert(
+            "Browser tidak mengizinkan akses clipboard. Tekan lama kolom lalu pilih Paste."
+        );
+
+    }
+
+}
+
+
+document
+.getElementById(
+    "previewForm"
+)
+.addEventListener(
     "submit",
-    function () {
+    () => {
 
-        document.getElementById(
+        document
+        .getElementById(
+            "loadingTitle"
+        )
+        .innerText =
+            "Mengambil video";
+
+        document
+        .getElementById(
+            "loadingText"
+        )
+        .innerText =
+            "Sedang membaca informasi TikTok...";
+
+        document
+        .getElementById(
             "loading"
-        ).style.display = "block";
-
-        const button =
-            form.querySelector("button");
-
-        button.disabled = true;
-
-        button.innerText =
-            "Memproses...";
+        )
+        .style.display =
+            "flex";
 
     }
 );
@@ -300,10 +866,22 @@ form.addEventListener(
 </body>
 
 </html>
-""", style=BASE_STYLE)
+""",
+
+    style=STYLE,
+    loading=LOADING
+
+    )
 
 
-@app.route("/preview", methods=["POST"])
+# =========================
+# PREVIEW
+# =========================
+
+@app.route(
+    "/preview",
+    methods=["POST"]
+)
 def preview():
 
     url = request.form.get(
@@ -311,146 +889,93 @@ def preview():
         ""
     ).strip()
 
+
     if not valid_tiktok_url(url):
 
-        return render_template_string("""
-        {{ style|safe }}
-
-        <div class="wrapper">
-
-            <div class="card error">
-
-                <h2>
-                    Link tidak valid
-                </h2>
-
-                <p>
-                    Masukkan link TikTok yang benar.
-                </p>
-
-                <a
-                    class="back"
-                    href="/"
-                >
-                    ← Kembali
-                </a>
-
-            </div>
-
-        </div>
-        """, style=BASE_STYLE), 400
-
-
-    command = [
-
-        sys.executable,
-        "-m",
-        "yt_dlp",
-
-        "--dump-single-json",
-        "--skip-download",
-
-        "--no-playlist",
-
-        "--impersonate",
-        "chrome",
-
-        url
-    ]
+        return error_page(
+            "Link tidak valid",
+            "Masukkan link TikTok yang benar."
+        ), 400
 
 
     try:
 
-        result = subprocess.run(
+        info = extract_info(url)
 
-            command,
 
-            capture_output=True,
-
-            text=True,
-
-            timeout=60
-
+        uploader = (
+            info.get("uploader")
+            or info.get("creator")
+            or "TikTok User"
         )
 
 
-        if result.returncode != 0:
-
-            return render_template_string("""
-            {{ style|safe }}
-
-            <div class="wrapper">
-
-                <div class="card error">
-
-                    <h2>
-                        Video tidak bisa diproses
-                    </h2>
-
-                    <p>
-                        TikTok mungkin membatasi video ini,
-                        link sudah tidak aktif,
-                        atau video tidak tersedia secara publik.
-                    </p>
-
-                    <a
-                        class="back"
-                        href="/"
-                    >
-                        ← Coba link lain
-                    </a>
-
-                </div>
-
-            </div>
-            """, style=BASE_STYLE), 500
-
-
-        info = json.loads(
-            result.stdout
+        creator_name = (
+            info.get("channel")
+            or info.get("creator")
+            or uploader
         )
 
 
-        thumbnail = (
-            info.get("thumbnail")
-            or ""
-        )
-
-        title = (
+        caption = (
             info.get("description")
             or info.get("title")
             or "Video TikTok"
         )
 
-        uploader = (
-            info.get("uploader")
-            or info.get("creator")
-            or info.get("channel")
-            or "TikTok User"
-        )
 
-        duration = info.get(
-            "duration"
+        thumbnail = select_thumbnail(
+            info
         )
 
 
-        if duration:
+        duration = format_duration(
+            info.get("duration")
+        )
 
-            minutes = int(
-                duration // 60
-            )
 
-            seconds = int(
-                duration % 60
-            )
+        view_count = format_number(
+            info.get("view_count")
+        )
 
-            duration_text = (
-                f"{minutes}:{seconds:02d}"
-            )
 
-        else:
+        like_count = format_number(
+            info.get("like_count")
+        )
 
-            duration_text = "-"
+
+        comment_count = format_number(
+            info.get("comment_count")
+        )
+
+
+        repost_count = format_number(
+            info.get("repost_count")
+        )
+
+
+        save_count = format_number(
+            info.get("save_count")
+        )
+
+
+        track = (
+            info.get("track")
+            or "Original sound"
+        )
+
+
+        artist = (
+            info.get("artist")
+            or uploader
+        )
+
+
+        avatar_letter = (
+            uploader[0].upper()
+            if uploader
+            else "T"
+        )
 
 
         return render_template_string("""
@@ -463,8 +988,10 @@ def preview():
 <meta charset="UTF-8">
 
 <meta
-name="viewport"
-content="width=device-width, initial-scale=1.0">
+    name="viewport"
+    content="width=device-width,
+    initial-scale=1.0"
+>
 
 <title>Preview TikTok</title>
 
@@ -472,66 +999,198 @@ content="width=device-width, initial-scale=1.0">
 
 </head>
 
+
 <body>
 
-<div class="wrapper">
+<div class="container">
 
     <div class="card">
 
         {% if thumbnail %}
 
         <img
-            class="thumbnail"
+            class="cover"
             src="{{ thumbnail }}"
-            alt="TikTok thumbnail"
+            alt="TikTok cover"
+            referrerpolicy="no-referrer"
         >
+
+        {% else %}
+
+        <div class="cover"></div>
 
         {% endif %}
 
-        <div class="info">
 
-            <div class="username">
-                @{{ uploader }}
+        <div class="creator-row">
+
+            <div class="avatar">
+                {{ avatar }}
             </div>
 
-            <div class="caption">
-                {{ title }}
-            </div>
+            <div>
 
-            <div class="meta">
-                Durasi: {{ duration }}
+                <div class="creator-name">
+                    {{ creator }}
+                </div>
+
+                <div class="username">
+                    @{{ uploader }}
+                </div>
+
             </div>
 
         </div>
 
 
-        <form
-            id="downloadForm"
-            action="/download"
-            method="POST"
-        >
+        <div class="caption">
+            {{ caption }}
+        </div>
 
-            <input
-                type="hidden"
-                name="url"
-                value="{{ url }}"
+
+        <div class="stats">
+
+            <div class="stat">
+
+                <div class="stat-value">
+                    {{ views }}
+                </div>
+
+                <div class="stat-label">
+                    VIEWS
+                </div>
+
+            </div>
+
+
+            <div class="stat">
+
+                <div class="stat-value">
+                    {{ likes }}
+                </div>
+
+                <div class="stat-label">
+                    LIKES
+                </div>
+
+            </div>
+
+
+            <div class="stat">
+
+                <div class="stat-value">
+                    {{ comments }}
+                </div>
+
+                <div class="stat-label">
+                    COMMENTS
+                </div>
+
+            </div>
+
+
+            <div class="stat">
+
+                <div class="stat-value">
+                    {{ shares }}
+                </div>
+
+                <div class="stat-label">
+                    SHARES
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="meta-box">
+
+            <div>
+                <strong>Durasi:</strong>
+                {{ duration }}
+            </div>
+
+            <div>
+                <strong>Sound:</strong>
+                {{ track }}
+            </div>
+
+            <div>
+                <strong>Artist:</strong>
+                {{ artist }}
+            </div>
+
+            <div>
+                <strong>Disimpan:</strong>
+                {{ saves }}
+            </div>
+
+        </div>
+
+
+        <div class="download-grid">
+
+
+            <form
+                class="download-form"
+                action="/download/video"
+                method="POST"
             >
 
-            <button type="submit">
-                Download Video
-            </button>
+                <input
+                    type="hidden"
+                    name="url"
+                    value="{{ url }}"
+                >
 
-        </form>
+                <button
+                    class="
+                    download-btn
+                    video-btn
+                    "
+                    type="submit"
+                >
+                    Download MP4
+
+                    <span class="small">
+                        Video
+                    </span>
+
+                </button>
+
+            </form>
 
 
-        <div
-            id="loading"
-            class="loading"
-        >
+            <form
+                class="download-form"
+                action="/download/audio"
+                method="POST"
+            >
 
-            <div class="spinner"></div>
+                <input
+                    type="hidden"
+                    name="url"
+                    value="{{ url }}"
+                >
 
-            Menyiapkan file video...
+                <button
+                    class="
+                    download-btn
+                    audio-btn
+                    "
+                    type="submit"
+                >
+                    Download MP3
+
+                    <span class="small">
+                        Audio
+                    </span>
+
+                </button>
+
+            </form>
+
 
         </div>
 
@@ -548,31 +1207,46 @@ content="width=device-width, initial-scale=1.0">
 </div>
 
 
+{{ loading|safe }}
+
+
 <script>
 
-const form =
-    document.getElementById(
-        "downloadForm"
+document
+.querySelectorAll(
+    ".download-form"
+)
+.forEach(form => {
+
+    form.addEventListener(
+        "submit",
+        () => {
+
+            document
+            .getElementById(
+                "loadingTitle"
+            )
+            .innerText =
+                "Menyiapkan file";
+
+            document
+            .getElementById(
+                "loadingText"
+            )
+            .innerText =
+                "Download akan dimulai setelah file siap.";
+
+            document
+            .getElementById(
+                "loading"
+            )
+            .style.display =
+                "flex";
+
+        }
     );
 
-form.addEventListener(
-    "submit",
-    function () {
-
-        document.getElementById(
-            "loading"
-        ).style.display = "block";
-
-        const button =
-            form.querySelector("button");
-
-        button.disabled = true;
-
-        button.innerText =
-            "Menyiapkan download...";
-
-    }
-);
+});
 
 </script>
 
@@ -581,11 +1255,28 @@ form.addEventListener(
 </html>
 """,
 
-        style=BASE_STYLE,
+        style=STYLE,
+        loading=LOADING,
+
         thumbnail=thumbnail,
-        title=title,
+
+        creator=creator_name,
         uploader=uploader,
-        duration=duration_text,
+        avatar=avatar_letter,
+
+        caption=caption,
+
+        views=view_count,
+        likes=like_count,
+        comments=comment_count,
+        shares=repost_count,
+        saves=save_count,
+
+        duration=duration,
+
+        track=track,
+        artist=artist,
+
         url=url
 
         )
@@ -593,9 +1284,11 @@ form.addEventListener(
 
     except subprocess.TimeoutExpired:
 
-        return """
-        <h2>Server terlalu lama memproses video.</h2>
-        """
+        return error_page(
+            "Server terlalu lama",
+            "TikTok membutuhkan waktu terlalu lama untuk merespons."
+        ), 504
+
 
     except Exception as e:
 
@@ -604,13 +1297,21 @@ form.addEventListener(
             e
         )
 
-        return """
-        <h2>Terjadi kesalahan saat membaca video.</h2>
-        """, 500
+        return error_page(
+            "Video tidak bisa diproses",
+            "Video mungkin privat, sudah dihapus, dibatasi TikTok, atau link sedang tidak tersedia."
+        ), 500
 
 
-@app.route("/download", methods=["POST"])
-def download():
+# =========================
+# VIDEO DOWNLOAD
+# =========================
+
+@app.route(
+    "/download/video",
+    methods=["POST"]
+)
+def download_video():
 
     url = request.form.get(
         "url",
@@ -620,109 +1321,89 @@ def download():
 
     if not valid_tiktok_url(url):
 
-        return "Link TikTok tidak valid.", 400
+        return error_page(
+            "Link tidak valid",
+            "Masukkan link TikTok yang benar."
+        ), 400
 
 
     folder = tempfile.mkdtemp()
 
 
-    output = os.path.join(
-        folder,
-        "%(id)s.%(ext)s"
-    )
-
-
-    command = [
-
-        sys.executable,
-        "-m",
-        "yt_dlp",
-
-        "--no-playlist",
-
-        "--impersonate",
-        "chrome",
-
-        "-f",
-        "best[ext=mp4]/best",
-
-        "-o",
-        output,
-
-        url
-    ]
-
-
     try:
 
+        info = extract_info(url)
+
+        uploader = safe_filename(
+            info.get("uploader")
+            or "tiktok"
+        )
+
+
+        video_id = safe_filename(
+            str(
+                info.get("id")
+                or "video"
+            )
+        )
+
+
+        output = os.path.join(
+            folder,
+            "%(id)s.%(ext)s"
+        )
+
+
+        command = [
+
+            sys.executable,
+            "-m",
+            "yt_dlp",
+
+            "--no-playlist",
+
+            "--impersonate",
+            "chrome",
+
+            "-f",
+            "best[ext=mp4]/best",
+
+            "-o",
+            output,
+
+            url
+        ]
+
+
         result = subprocess.run(
-
             command,
-
             capture_output=True,
-
             text=True,
-
-            timeout=120
-
+            timeout=150
         )
 
 
         if result.returncode != 0:
 
-            shutil.rmtree(
-                folder,
-                ignore_errors=True
+            raise RuntimeError(
+                result.stderr[-2000:]
             )
-
-            return render_template_string("""
-            {{ style|safe }}
-
-            <div class="wrapper">
-
-                <div class="card error">
-
-                    <h2>
-                        Download gagal
-                    </h2>
-
-                    <p>
-                        TikTok tidak memberikan file video
-                        untuk link ini.
-                    </p>
-
-                    <a
-                        class="back"
-                        href="/"
-                    >
-                        ← Coba Lagi
-                    </a>
-
-                </div>
-
-            </div>
-            """, style=BASE_STYLE), 500
 
 
         files = [
+            f for f
+            in os.listdir(folder)
 
-            f for f in os.listdir(folder)
-
-            if not f.endswith(".part")
-
+            if not f.endswith(
+                ".part"
+            )
         ]
 
 
         if not files:
 
-            shutil.rmtree(
-                folder,
-                ignore_errors=True
-            )
-
-            return (
-                "File video tidak ditemukan.",
-                500
+            raise RuntimeError(
+                "File video tidak ditemukan"
             )
 
 
@@ -732,57 +1413,267 @@ def download():
         )
 
 
-        extension = os.path.splitext(
+        ext = os.path.splitext(
             filepath
         )[1]
 
 
         return send_file(
-
             filepath,
 
             as_attachment=True,
 
             download_name=(
-                "tiktok-video"
-                + extension
+                f"{uploader}-"
+                f"{video_id}"
+                f"{ext}"
             )
-
         )
 
 
     except subprocess.TimeoutExpired:
 
-        shutil.rmtree(
-            folder,
-            ignore_errors=True
-        )
-
-        return """
-        <h2>
-        Download terlalu lama.
-        </h2>
-        """, 504
+        return error_page(
+            "Download timeout",
+            "Video membutuhkan waktu terlalu lama untuk diproses."
+        ), 504
 
 
     except Exception as e:
 
-        shutil.rmtree(
-            folder,
-            ignore_errors=True
-        )
-
         print(
-            "Download error:",
+            "Video error:",
             e
         )
 
-        return """
-        <h2>
-        Terjadi kesalahan pada server.
-        </h2>
-        """, 500
+        return error_page(
+            "Download gagal",
+            "TikTok tidak memberikan file video untuk link ini."
+        ), 500
 
+
+# =========================
+# AUDIO DOWNLOAD
+# =========================
+
+@app.route(
+    "/download/audio",
+    methods=["POST"]
+)
+def download_audio():
+
+    url = request.form.get(
+        "url",
+        ""
+    ).strip()
+
+
+    if not valid_tiktok_url(url):
+
+        return error_page(
+            "Link tidak valid",
+            "Masukkan link TikTok yang benar."
+        ), 400
+
+
+    folder = tempfile.mkdtemp()
+
+
+    try:
+
+        info = extract_info(url)
+
+        uploader = safe_filename(
+            info.get("uploader")
+            or "tiktok"
+        )
+
+
+        video_id = safe_filename(
+            str(
+                info.get("id")
+                or "audio"
+            )
+        )
+
+
+        output = os.path.join(
+            folder,
+            "%(id)s.%(ext)s"
+        )
+
+
+        command = [
+
+            sys.executable,
+            "-m",
+            "yt_dlp",
+
+            "--no-playlist",
+
+            "--impersonate",
+            "chrome",
+
+            "-x",
+
+            "--audio-format",
+            "mp3",
+
+            "--audio-quality",
+            "0",
+
+            "-o",
+            output,
+
+            url
+        ]
+
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=180
+        )
+
+
+        if result.returncode != 0:
+
+            raise RuntimeError(
+                result.stderr[-2500:]
+            )
+
+
+        files = [
+            f for f
+            in os.listdir(folder)
+
+            if f.lower().endswith(
+                ".mp3"
+            )
+        ]
+
+
+        if not files:
+
+            raise RuntimeError(
+                "MP3 tidak ditemukan. Pastikan FFmpeg terpasang."
+            )
+
+
+        filepath = os.path.join(
+            folder,
+            files[0]
+        )
+
+
+        return send_file(
+            filepath,
+
+            as_attachment=True,
+
+            download_name=(
+                f"{uploader}-"
+                f"{video_id}"
+                ".mp3"
+            )
+        )
+
+
+    except subprocess.TimeoutExpired:
+
+        return error_page(
+            "Audio timeout",
+            "Audio membutuhkan waktu terlalu lama untuk diproses."
+        ), 504
+
+
+    except Exception as e:
+
+        print(
+            "Audio error:",
+            e
+        )
+
+        return error_page(
+            "MP3 gagal dibuat",
+            "Server tidak berhasil mengubah audio menjadi MP3."
+        ), 500
+
+
+# =========================
+# ERROR PAGE
+# =========================
+
+def error_page(title, text):
+
+    return render_template_string("""
+<!DOCTYPE html>
+
+<html lang="id">
+
+<head>
+
+<meta
+    name="viewport"
+    content="width=device-width,
+    initial-scale=1.0"
+>
+
+<title>Error</title>
+
+{{ style|safe }}
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <div class="
+        card
+        error-card
+    ">
+
+        <div class="error-icon">
+            !
+        </div>
+
+        <div class="error-title">
+            {{ title }}
+        </div>
+
+        <div class="error-text">
+            {{ text }}
+        </div>
+
+        <a
+            class="back"
+            href="/"
+        >
+            ← Kembali
+        </a>
+
+    </div>
+
+</div>
+
+</body>
+
+</html>
+""",
+
+    style=STYLE,
+    title=title,
+    text=text
+
+    )
+
+
+# =========================
+# RUN
+# =========================
 
 if __name__ == "__main__":
 
@@ -792,6 +1683,7 @@ if __name__ == "__main__":
             5000
         )
     )
+
 
     app.run(
         host="0.0.0.0",
