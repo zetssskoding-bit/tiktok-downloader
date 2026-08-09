@@ -1194,16 +1194,36 @@ button:disabled {
 }
 
 .best-btn {
-    background:
-        linear-gradient(
-            135deg,
-            #fe2c55,
-            #ff174c
-        );
+    background: linear-gradient(
+        135deg,
+        #fe2c55,
+        #ff174c
+    ) !important;
+
+    background-color: #fe2c55 !important;
+
+    color: #ffffff !important;
+
+    border: 1px solid #fe2c55 !important;
 
     box-shadow:
         0 7px 20px
-        rgba(254,44,85,.15);
+        rgba(254,44,85,.25);
+
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.best-btn:hover,
+.best-btn:focus,
+.best-btn:active {
+    background: linear-gradient(
+        135deg,
+        #fe2c55,
+        #ff174c
+    ) !important;
+
+    color: #ffffff !important;
 }
 
 .quality-btn {
