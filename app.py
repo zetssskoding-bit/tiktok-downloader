@@ -2041,92 +2041,97 @@ def preview():
 
         <div class="quality-grid">
 
+    <!-- BEST QUALITY -->
 
-            <form
-                class="download-form"
-                action="/download/video"
-                method="POST"
-            >
-
-                <input
-                    type="hidden"
-                    name="url"
-                    value="{{ url }}"
-                >
-
-                <input
-                    type="hidden"
-                    name="quality"
-                    value="best"
-                >
-
-                <button
-                    class="
-                        download-btn
-                        best-btn
-                    "
-                    type="submit"
-                >
-                    Best
-
-                    {{ quality.resolution }}p
-
-{% if quality.badge %}
-    · {{ quality.badge }}
-{% endif %}
-
-<span class="small">
-    {{ quality.size }}
-</span>
-
-                </button>
-
-            </form>
-
-
-            {% for quality in qualities %}
-
-<form
-    class="download-form"
-    action="/download/video"
-    method="POST"
->
-
-    <input
-        type="hidden"
-        name="url"
-        value="{{ url }}"
+    <form
+        class="download-form"
+        action="/download/video"
+        method="POST"
     >
 
-    <input
-        type="hidden"
-        name="quality"
-        value="{{ quality.resolution }}"
+        <input
+            type="hidden"
+            name="url"
+            value="{{ url }}"
+        >
+
+        <input
+            type="hidden"
+            name="quality"
+            value="best"
+        >
+
+        <button
+            class="
+                download-btn
+                video-btn
+            "
+            type="submit"
+        >
+
+            Best
+
+            {% if best_info.badge %}
+                · {{ best_info.badge }}
+            {% endif %}
+
+            <span class="small">
+                {{ best_info.size }}
+            </span>
+
+        </button>
+
+    </form>
+
+
+    <!-- AVAILABLE RESOLUTIONS -->
+
+    {% for quality in qualities %}
+
+    <form
+        class="download-form"
+        action="/download/video"
+        method="POST"
     >
 
-    <button
-    class="
-        download-btn
-        video-btn
-    "
-    type="submit"
->
+        <input
+            type="hidden"
+            name="url"
+            value="{{ url }}"
+        >
 
-    Best
-    {% if best_info.badge %}
-        · {{ best_info.badge }}
-    {% endif %}
+        <input
+            type="hidden"
+            name="quality"
+            value="{{ quality.resolution }}"
+        >
 
-    <span class="small">
-        {{ best_info.size }}
-    </span>
+        <button
+            class="
+                download-btn
+                quality-btn
+            "
+            type="submit"
+        >
 
-</button>
+            {{ quality.resolution }}p
 
-{% endfor %}
+            {% if quality.badge %}
+                · {{ quality.badge }}
+            {% endif %}
 
+            <span class="small">
+                {{ quality.size }}
+            </span>
 
-        </div>
+        </button>
+
+    </form>
+
+    {% endfor %}
+
+</div>
+        
 
 
         <form
@@ -2150,13 +2155,11 @@ def preview():
             >
                 Download MP3
 
-                Download MP3
-
-<span class="small">
-    {{ mp3_size }} · Audio only
-</span>
-
-            </button>
+            <span class="small">
+                {{ mp3_size }} · Audio only
+            </span>
+ 
+       </button>
 
         </form>
 
