@@ -327,6 +327,129 @@ def get_available_resolutions(info):
         resolutions,
         reverse=True
     )[:8]
+
+def format_filesize(size):
+
+    if not size:
+        return "Ukuran tidak tersedia"
+
+    try:
+        size = int(size)
+    except:
+        return "Ukuran tidak tersedia"
+
+    mb = size / (1024 * 1024)
+
+    if mb >= 1:
+        return f"~{mb:.1f} MB"
+
+    kb = size / 1024
+
+    return f"~{kb:.0f} KB"
+
+
+def get_quality_options(info):
+
+    options = []
+
+    resolutions = get_available_resolutions(
+        info
+    )
+
+    duration = info.get("duration") or 0
+
+    for resolution in resolutions:
+
+        candidates = []
+
+        for fmt in info.get("formats") or []:
+
+            if fmt.get("vcodec") in (
+                None,
+                "none"
+            ):
+                continue
+
+            if fmt.get("acodec") in (
+                None,
+                "none"
+            ):
+                continue
+
+            width = fmt.get("width")
+            height = fmt.get("height")
+
+            if not width or not height:
+                continue
+
+            try:
+                current_resolution = min(
+                    int(width),
+                    int(height)
+                )
+            except:
+                continue
+
+            if current_resolution != resolution:
+                continue
+
+            candidates.append(fmt)
+
+
+        if not candidates:
+            continue
+
+
+        candidates.sort(
+            key=lambda fmt: (
+                fmt.get("ext") == "mp4",
+                fmt.get("tbr") or 0,
+                fmt.get("filesize")
+                or fmt.get("filesize_approx")
+                or 0
+            ),
+            reverse=True
+        )
+
+
+        best_format = candidates[0]
+
+
+        size = (
+            best_format.get("filesize")
+            or best_format.get(
+                "filesize_approx"
+            )
+        )
+
+
+        # Kalau TikTok tidak memberi filesize,
+        # estimasi dari bitrate × durasi.
+        if (
+            not size
+            and duration
+            and best_format.get("tbr")
+        ):
+
+            bitrate_kbps = (
+                best_format.get("tbr")
+            )
+
+            size = (
+                bitrate_kbps
+                * 1000
+                * duration
+                / 8
+            )
+
+
+        options.append({
+            "resolution": resolution,
+            "size": format_filesize(size)
+        })
+
+
+    return options
     
 
 def get_profile_picture(video_url, info):
@@ -1570,8 +1693,10 @@ def preview():
         )
 
 
-        qualities = get_available_resolutions(
-            info
+        qualities = (
+    get_quality_options(
+        info
+    )
         )
 
 
@@ -1820,44 +1945,43 @@ def preview():
 
             {% for quality in qualities %}
 
+<form
+    class="download-form"
+    action="/download/video"
+    method="POST"
+>
 
-            <form
-                class="download-form"
-                action="/download/video"
-                method="POST"
-            >
+    <input
+        type="hidden"
+        name="url"
+        value="{{ url }}"
+    >
 
-                <input
-                    type="hidden"
-                    name="url"
-                    value="{{ url }}"
-                >
+    <input
+        type="hidden"
+        name="quality"
+        value="{{ quality.resolution }}"
+    >
 
-                <input
-                    type="hidden"
-                    name="quality"
-                    value="{{ quality }}"
-                >
+    <button
+        class="
+            download-btn
+            quality-btn
+        "
+        type="submit"
+    >
 
-                <button
-                    class="
-                        download-btn
-                        quality-btn
-                    "
-                    type="submit"
-                >
-                    {{ quality }}p
+        {{ quality.resolution }}p
 
-                    <span class="small">
-                        MP4
-                    </span>
+        <span class="small">
+            {{ quality.size }}
+        </span>
 
-                </button>
+    </button>
 
-            </form>
+</form>
 
-
-            {% endfor %}
+{% endfor %}
 
 
         </div>
