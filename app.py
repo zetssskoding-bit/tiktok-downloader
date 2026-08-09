@@ -196,77 +196,115 @@ def get_available_resolutions(info):
     )[:8]
     
 
-def get_profile_picture(info):
-
-    profile_url = info.get("uploader_url")
+def get_profile_picture(video_url, info):
 
     uploader = info.get("uploader")
 
-    if not profile_url and uploader:
-        profile_url = (
+    profile_url = info.get("uploader_url")
+
+    urls_to_try = [
+        video_url,
+        profile_url
+    ]
+
+    if uploader:
+        urls_to_try.append(
             f"https://www.tiktok.com/@{uploader}"
         )
 
-    if not profile_url:
-        return ""
+    patterns = [
 
-    try:
+        r'"avatarLarger"\s*:\s*"([^"]+)"',
 
-        response = curl_requests.get(
-            profile_url,
-            impersonate="chrome",
-            timeout=15
-        )
+        r'"avatarMedium"\s*:\s*"([^"]+)"',
 
-        if response.status_code != 200:
-            return ""
+        r'"avatarThumb"\s*:\s*"([^"]+)"',
 
-        html = response.text
+        r'"avatar_larger".*?"url_list"\s*:\s*\[\s*"([^"]+)"',
 
-        patterns = [
+        r'"avatar_medium".*?"url_list"\s*:\s*\[\s*"([^"]+)"',
 
-            r'"avatarLarger":"([^"]+)"',
+        r'"avatar_thumb".*?"url_list"\s*:\s*\[\s*"([^"]+)"'
+    ]
 
-            r'"avatarMedium":"([^"]+)"',
+    for page_url in urls_to_try:
 
-            r'"avatarThumb":"([^"]+)"',
+        if not page_url:
+            continue
 
-            r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)'
-        ]
+        try:
 
-        for pattern in patterns:
-
-            match = re.search(
-                pattern,
-                html
+            response = curl_requests.get(
+                page_url,
+                impersonate="chrome",
+                timeout=20,
+                allow_redirects=True
             )
 
-            if match:
+            if response.status_code != 200:
+                continue
 
-                avatar_url = match.group(1)
+            html = response.text
 
-                avatar_url = (
-                    avatar_url
-                    .replace(
-                        r"\u002F",
-                        "/"
-                    )
-                    .replace(
-                        r"\/",
-                        "/"
-                    )
+            for pattern in patterns:
+
+                match = re.search(
+                    pattern,
+                    html,
+                    re.DOTALL
                 )
 
-                return unescape(
-                    avatar_url
-                )
+                if not match:
+                    continue
 
-    except Exception as e:
+                raw_url = match.group(1)
 
-        print(
-            "Avatar error:",
-            e
-        )
+                try:
+
+                    avatar_url = json.loads(
+                        '"' + raw_url + '"'
+                    )
+
+                except Exception:
+
+                    avatar_url = (
+                        raw_url
+                        .replace(
+                            r"\u002F",
+                            "/"
+                        )
+                        .replace(
+                            r"\/",
+                            "/"
+                        )
+                        .replace(
+                            r"\u0026",
+                            "&"
+                        )
+                    )
+
+                if avatar_url.startswith(
+                    "http"
+                ):
+
+                    print(
+                        "Avatar ditemukan:",
+                        uploader
+                    )
+
+                    return avatar_url
+
+        except Exception as e:
+
+            print(
+                "Avatar fetch error:",
+                e
+            )
+
+    print(
+        "Avatar tidak ditemukan:",
+        uploader
+    )
 
     return ""
 
@@ -1365,6 +1403,7 @@ def preview():
         
 
         avatar_url = get_profile_picture(
+            url,
             info
         )
 
