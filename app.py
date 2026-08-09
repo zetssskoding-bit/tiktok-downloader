@@ -71,6 +71,53 @@ def format_duration(duration):
         return f"{hours}:{minutes:02d}:{seconds:02d}"
 
     return f"{minutes}:{seconds:02d}"
+    
+
+def get_available_resolutions(info):
+
+    resolutions = set()
+
+    formats = info.get("formats") or []
+
+    for fmt in formats:
+
+        # Harus ada video
+        if fmt.get("vcodec") in (None, "none"):
+            continue
+
+        # Hindari format video-only kalau TikTok
+        # memang memberi info audio codec
+        if fmt.get("acodec") == "none":
+            continue
+
+        width = fmt.get("width")
+        height = fmt.get("height")
+
+        if not width or not height:
+            continue
+
+        try:
+            width = int(width)
+            height = int(height)
+        except:
+            continue
+
+        # Untuk video portrait:
+        # 1080 x 1920 -> 1080p
+        resolution = min(
+            width,
+            height
+        )
+
+        if resolution >= 240:
+            resolutions.add(
+                resolution
+            )
+
+    return sorted(
+        resolutions,
+        reverse=True
+    )[:6]
 
 
 def safe_filename(text):
@@ -957,6 +1004,11 @@ def preview():
         save_count = format_number(
             info.get("save_count")
         )
+        
+
+        qualities = get_available_resolutions(
+    info
+        )
 
 
         track = (
@@ -1271,6 +1323,8 @@ document
         comments=comment_count,
         shares=repost_count,
         saves=save_count,
+
+        qualities=qualities,
 
         duration=duration,
 
