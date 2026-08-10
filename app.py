@@ -1,3 +1,4 @@
+from werkzeug.utils import secure_filename
 from flask import Flask, request, send_file, render_template_string
 import subprocess
 import tempfile
@@ -13,7 +14,7 @@ from html import unescape
 
 
 app = Flask(__name__)
-
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
 
 # =========================================================
 # HELPERS
@@ -2778,6 +2779,898 @@ def download_audio():
         return error_page(
             "MP3 gagal dibuat",
             "Server tidak berhasil mengubah audio TikTok menjadi MP3."
+        ), 500
+        
+
+# =========================================================
+# VIDEO COMPRESSOR
+# =========================================================
+
+ALLOWED_VIDEO_EXTENSIONS = {
+    "mp4",
+    "mov",
+    "mkv",
+    "webm",
+    "avi",
+    "m4v"
+}
+
+
+def allowed_video(filename):
+
+    if "." not in filename:
+        return False
+
+    extension = (
+        filename
+        .rsplit(".", 1)[1]
+        .lower()
+    )
+
+    return (
+        extension
+        in ALLOWED_VIDEO_EXTENSIONS
+    )
+
+
+@app.route(
+    "/compress-video",
+    methods=["GET", "POST"]
+)
+def compress_video():
+
+    if request.method == "GET":
+
+        return render_template_string(
+            """
+<!DOCTYPE html>
+
+<html lang="id">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="
+        width=device-width,
+        initial-scale=1.0
+    "
+>
+
+<title>Video Compressor</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    color: white;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #262626,
+            #0d0d0d 45%,
+            #050505
+        );
+
+    padding: 20px;
+}
+
+.container {
+    width: 100%;
+    max-width: 460px;
+
+    margin: 45px auto;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.icon {
+    width: 65px;
+    height: 65px;
+
+    margin: 0 auto 15px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 20px;
+
+    font-size: 30px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #25f4ee,
+            #fe2c55
+        );
+}
+
+h1 {
+    margin: 0;
+    font-size: 29px;
+}
+
+.subtitle {
+    margin-top: 9px;
+
+    color: #999;
+
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.card {
+    padding: 20px;
+
+    border-radius: 24px;
+
+    border:
+        1px solid #2b2b2b;
+
+    background: #171717;
+}
+
+.upload-box {
+    position: relative;
+
+    padding: 28px 15px;
+
+    text-align: center;
+
+    border:
+        1px dashed #555;
+
+    border-radius: 17px;
+
+    background: #202020;
+}
+
+.upload-box input {
+    position: absolute;
+
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    opacity: 0;
+
+    cursor: pointer;
+}
+
+.upload-title {
+    font-weight: bold;
+}
+
+.upload-info {
+    margin-top: 7px;
+
+    color: #888;
+
+    font-size: 12px;
+}
+
+.file-selected {
+    display: none;
+
+    margin-top: 12px;
+    padding: 12px;
+
+    border-radius: 13px;
+
+    background:
+        rgba(
+            37,
+            244,
+            238,
+            .08
+        );
+
+    color: #25f4ee;
+
+    font-size: 12px;
+
+    word-break: break-word;
+}
+
+.label {
+    display: block;
+
+    margin:
+        20px 0 10px;
+
+    color: #aaa;
+
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.option {
+    display: block;
+
+    margin-bottom: 9px;
+}
+
+.option input {
+    display: none;
+}
+
+.option-content {
+    display: block;
+
+    padding: 14px;
+
+    border:
+        1px solid #333;
+
+    border-radius: 14px;
+
+    background: #222;
+
+    cursor: pointer;
+}
+
+.option input:checked
++ .option-content {
+
+    border-color: #fe2c55;
+
+    background:
+        rgba(
+            254,
+            44,
+            85,
+            .09
+        );
+}
+
+.option-title {
+    font-weight: bold;
+}
+
+.option-desc {
+    margin-top: 4px;
+
+    color: #888;
+
+    font-size: 11px;
+}
+
+.recommended {
+    color: #fe2c55;
+
+    font-size: 10px;
+
+    margin-left: 5px;
+}
+
+.compress-btn {
+    width: 100%;
+
+    margin-top: 15px;
+    padding: 16px;
+
+    border: 0;
+    border-radius: 14px;
+
+    color: white;
+
+    font-weight: bold;
+    font-size: 15px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #fe2c55,
+            #ff174c
+        );
+
+    cursor: pointer;
+}
+
+.note {
+    margin-top: 15px;
+
+    text-align: center;
+
+    color: #666;
+
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.back {
+    display: block;
+
+    margin-top: 20px;
+
+    text-align: center;
+
+    color: #999;
+
+    text-decoration: none;
+
+    font-size: 13px;
+}
+
+.loading {
+    position: fixed;
+
+    inset: 0;
+
+    display: none;
+
+    align-items: center;
+    justify-content: center;
+
+    background:
+        rgba(
+            0,
+            0,
+            0,
+            .85
+        );
+
+    z-index: 999;
+}
+
+.loading-card {
+    width: 80%;
+    max-width: 300px;
+
+    padding: 28px;
+
+    text-align: center;
+
+    border-radius: 20px;
+
+    background: #181818;
+
+    border:
+        1px solid #333;
+}
+
+.spinner {
+    width: 42px;
+    height: 42px;
+
+    margin:
+        0 auto 15px;
+
+    border:
+        4px solid #333;
+
+    border-top-color: #fe2c55;
+
+    border-radius: 50%;
+
+    animation:
+        spin .8s
+        linear infinite;
+}
+
+@keyframes spin {
+
+    to {
+        transform:
+            rotate(360deg);
+    }
+
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+
+        <div class="icon">
+            ↓
+        </div>
+
+        <h1>
+            Video Compressor
+        </h1>
+
+        <div class="subtitle">
+            Kurangi ukuran video tanpa
+            menurunkan resolusi aslinya.
+        </div>
+
+    </div>
+
+
+    <div class="card">
+
+        <form
+            id="compressForm"
+            action="/compress-video"
+            method="POST"
+            enctype="multipart/form-data"
+        >
+
+            <div class="upload-box">
+
+                <input
+                    id="videoInput"
+                    type="file"
+                    name="video"
+                    accept="video/*"
+                    required
+                >
+
+                <div class="upload-title">
+                    Pilih Video
+                </div>
+
+                <div class="upload-info">
+                    MP4, MOV, MKV, WEBM · Maks. 100 MB
+                </div>
+
+            </div>
+
+
+            <div
+                id="fileSelected"
+                class="file-selected"
+            >
+            </div>
+
+
+            <span class="label">
+                Pilih tingkat kompresi
+            </span>
+
+
+            <label class="option">
+
+                <input
+                    type="radio"
+                    name="mode"
+                    value="high"
+                >
+
+                <span class="option-content">
+
+                    <span class="option-title">
+                        High Quality
+                    </span>
+
+                    <div class="option-desc">
+                        Kualitas sangat dekat dengan video asli.
+                    </div>
+
+                </span>
+
+            </label>
+
+
+            <label class="option">
+
+                <input
+                    type="radio"
+                    name="mode"
+                    value="balanced"
+                    checked
+                >
+
+                <span class="option-content">
+
+                    <span class="option-title">
+                        Balanced
+
+                        <span class="recommended">
+                            RECOMMENDED
+                        </span>
+
+                    </span>
+
+                    <div class="option-desc">
+                        Keseimbangan kualitas dan ukuran file.
+                    </div>
+
+                </span>
+
+            </label>
+
+
+            <label class="option">
+
+                <input
+                    type="radio"
+                    name="mode"
+                    value="maximum"
+                >
+
+                <span class="option-content">
+
+                    <span class="option-title">
+                        Maximum Compression
+                    </span>
+
+                    <div class="option-desc">
+                        Ukuran lebih kecil dengan kompresi lebih kuat.
+                    </div>
+
+                </span>
+
+            </label>
+
+
+            <button
+                class="compress-btn"
+                type="submit"
+            >
+                Compress Video
+            </button>
+
+        </form>
+
+
+        <div class="note">
+            Resolusi asli dipertahankan.
+            Kompresi dapat sedikit mengurangi
+            kualitas visual.
+        </div>
+
+    </div>
+
+
+    <a
+        class="back"
+        href="/"
+    >
+        ← Kembali ke TikTok Downloader
+    </a>
+
+</div>
+
+
+<div
+    id="loading"
+    class="loading"
+>
+
+    <div class="loading-card">
+
+        <div class="spinner"></div>
+
+        <strong>
+            Mengompres video...
+        </strong>
+
+        <div
+            style="
+                color:#888;
+                font-size:12px;
+                margin-top:8px;
+            "
+        >
+            Video besar mungkin membutuhkan
+            beberapa menit.
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+const videoInput =
+    document.getElementById(
+        "videoInput"
+    );
+
+const fileSelected =
+    document.getElementById(
+        "fileSelected"
+    );
+
+
+videoInput.addEventListener(
+    "change",
+    function () {
+
+        if (!this.files.length) {
+            return;
+        }
+
+        const file =
+            this.files[0];
+
+        const mb =
+            (
+                file.size
+                / 1024
+                / 1024
+            ).toFixed(1);
+
+        fileSelected.innerText =
+            "✓ "
+            + file.name
+            + " · "
+            + mb
+            + " MB";
+
+        fileSelected.style.display =
+            "block";
+
+    }
+);
+
+
+document
+.getElementById(
+    "compressForm"
+)
+.addEventListener(
+    "submit",
+    function () {
+
+        document
+        .getElementById(
+            "loading"
+        )
+        .style.display =
+            "flex";
+
+    }
+);
+
+</script>
+
+</body>
+
+</html>
+            """
+        )
+
+
+    # =====================
+    # POST / COMPRESS
+    # =====================
+
+    if "video" not in request.files:
+
+        return error_page(
+            "Video tidak ditemukan",
+            "Pilih video yang ingin dikompres."
+        ), 400
+
+
+    video = request.files["video"]
+
+
+    if not video.filename:
+
+        return error_page(
+            "Video tidak ditemukan",
+            "Pilih video yang ingin dikompres."
+        ), 400
+
+
+    if not allowed_video(
+        video.filename
+    ):
+
+        return error_page(
+            "Format tidak didukung",
+            "Gunakan MP4, MOV, MKV, WEBM, AVI, atau M4V."
+        ), 400
+
+
+    mode = request.form.get(
+        "mode",
+        "balanced"
+    )
+
+
+    crf_values = {
+        "high": "20",
+        "balanced": "23",
+        "maximum": "28"
+    }
+
+
+    crf = crf_values.get(
+        mode,
+        "23"
+    )
+
+
+    folder = tempfile.mkdtemp()
+
+
+    try:
+
+        original_name = (
+            secure_filename(
+                video.filename
+            )
+        )
+
+
+        input_path = os.path.join(
+            folder,
+            original_name
+        )
+
+
+        output_path = os.path.join(
+            folder,
+            "compressed.mp4"
+        )
+
+
+        video.save(
+            input_path
+        )
+
+
+        original_size = os.path.getsize(
+            input_path
+        )
+
+
+        command = [
+            "ffmpeg",
+            "-y",
+
+            "-i",
+            input_path,
+
+            "-map",
+            "0:v:0",
+
+            "-map",
+            "0:a?",
+
+            "-c:v",
+            "libx264",
+
+            "-preset",
+            "medium",
+
+            "-crf",
+            crf,
+
+            "-c:a",
+            "aac",
+
+            "-b:a",
+            "128k",
+
+            "-movflags",
+            "+faststart",
+
+            output_path
+        ]
+
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=600
+        )
+
+
+        if (
+            result.returncode != 0
+            or not os.path.exists(
+                output_path
+            )
+        ):
+
+            print(
+                "FFmpeg compressor error:",
+                result.stderr[-3000:]
+            )
+
+            raise RuntimeError(
+                "FFmpeg gagal memproses video."
+            )
+
+
+        compressed_size = (
+            os.path.getsize(
+                output_path
+            )
+        )
+
+
+        print(
+            "Video compressed:",
+            original_size,
+            "->",
+            compressed_size
+        )
+
+
+        base_name = os.path.splitext(
+            original_name
+        )[0]
+
+
+        download_name = (
+            f"{base_name}-compressed.mp4"
+        )
+
+
+        response = send_file(
+            output_path,
+
+            as_attachment=True,
+
+            download_name=download_name,
+
+            mimetype="video/mp4"
+        )
+
+
+        response.call_on_close(
+            lambda:
+            shutil.rmtree(
+                folder,
+                ignore_errors=True
+            )
+        )
+
+
+        return response
+
+
+    except subprocess.TimeoutExpired:
+
+        shutil.rmtree(
+            folder,
+            ignore_errors=True
+        )
+
+        return error_page(
+            "Proses terlalu lama",
+            "Video membutuhkan waktu terlalu lama untuk dikompres."
+        ), 504
+
+
+    except Exception as e:
+
+        print(
+            "Compressor error:",
+            e
+        )
+
+        shutil.rmtree(
+            folder,
+            ignore_errors=True
+        )
+
+        return error_page(
+            "Kompresi gagal",
+            "Video tidak berhasil diproses."
         ), 500
 
 
