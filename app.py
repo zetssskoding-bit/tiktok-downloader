@@ -1556,8 +1556,395 @@ def error_page(title, text):
 # HOME PAGE
 # =========================================================
 
+# =========================================================
+# MAIN HOMEPAGE
+# =========================================================
+
 @app.route("/")
 def home():
+
+    return """
+<!DOCTYPE html>
+
+<html lang="id">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>Zetss Tools</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+    color: white;
+
+    background:
+        radial-gradient(
+            circle at 50% -10%,
+            #292929,
+            #0d0d0d 42%,
+            #050505 80%
+        );
+
+    padding: 22px;
+}
+
+.container {
+    width: 100%;
+    max-width: 460px;
+
+    margin: 45px auto;
+}
+
+.brand {
+    text-align: center;
+
+    margin-bottom: 35px;
+}
+
+.logo {
+    width: 68px;
+    height: 68px;
+
+    margin:
+        0 auto 16px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 22px;
+
+    font-size: 28px;
+    font-weight: 900;
+
+    background:
+        linear-gradient(
+            135deg,
+            #25f4ee,
+            #222 45%,
+            #fe2c55
+        );
+
+    box-shadow:
+        0 14px 40px
+        rgba(254,44,85,.17);
+}
+
+h1 {
+    margin: 0;
+
+    font-size: 30px;
+}
+
+.subtitle {
+    margin-top: 9px;
+
+    color: #888;
+
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.section-title {
+    margin:
+        0 0 12px 3px;
+
+    color: #888;
+
+    font-size: 12px;
+    font-weight: bold;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+}
+
+.tools {
+    display: grid;
+
+    gap: 13px;
+}
+
+.tool-card {
+    display: flex;
+    align-items: center;
+
+    gap: 15px;
+
+    padding: 18px;
+
+    border:
+        1px solid #2d2d2d;
+
+    border-radius: 20px;
+
+    background:
+        rgba(25,25,25,.96);
+
+    color: white;
+
+    text-decoration: none;
+
+    transition:
+        transform .15s,
+        border-color .15s;
+}
+
+.tool-card:active {
+    transform:
+        scale(.98);
+}
+
+.tool-card:hover {
+    border-color:
+        #444;
+}
+
+.tool-icon {
+    width: 53px;
+    height: 53px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 16px;
+
+    font-size: 23px;
+    font-weight: bold;
+}
+
+.tiktok-icon {
+    background:
+        linear-gradient(
+            135deg,
+            #25f4ee,
+            #111 48%,
+            #fe2c55
+        );
+}
+
+.compress-icon {
+    background:
+        linear-gradient(
+            135deg,
+            #7b61ff,
+            #fe2c55
+        );
+}
+
+.tool-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.tool-name {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.tool-desc {
+    margin-top: 5px;
+
+    color: #888;
+
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.arrow {
+    color: #666;
+
+    font-size: 22px;
+}
+
+.badge {
+    display: inline-block;
+
+    margin-top: 8px;
+
+    padding:
+        4px 8px;
+
+    border-radius: 20px;
+
+    font-size: 9px;
+    font-weight: bold;
+
+    color: #aaa;
+
+    background: #292929;
+}
+
+.footer {
+    margin-top: 30px;
+
+    text-align: center;
+
+    color: #555;
+
+    font-size: 11px;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <div class="brand">
+
+        <div class="logo">
+            Z
+        </div>
+
+        <h1>
+            Zetss Tools
+        </h1>
+
+        <div class="subtitle">
+            Simple tools untuk download,
+            convert, dan mengolah media.
+        </div>
+
+    </div>
+
+
+    <div class="section-title">
+        Media Tools
+    </div>
+
+
+    <div class="tools">
+
+
+        <!-- TIKTOK DOWNLOADER -->
+
+        <a
+            class="tool-card"
+            href="/tiktok-downloader"
+        >
+
+            <div
+                class="
+                    tool-icon
+                    tiktok-icon
+                "
+            >
+                ♪
+            </div>
+
+
+            <div class="tool-content">
+
+                <div class="tool-name">
+                    TikTok Downloader
+                </div>
+
+                <div class="tool-desc">
+                    Preview TikTok,
+                    download MP4 berbagai kualitas
+                    atau convert ke MP3.
+                </div>
+
+                <span class="badge">
+                    MP4 · MP3 · HD
+                </span>
+
+            </div>
+
+
+            <div class="arrow">
+                ›
+            </div>
+
+        </a>
+
+
+        <!-- VIDEO COMPRESSOR -->
+
+        <a
+            class="tool-card"
+            href="/compress-video"
+        >
+
+            <div
+                class="
+                    tool-icon
+                    compress-icon
+                "
+            >
+                ↓
+            </div>
+
+
+            <div class="tool-content">
+
+                <div class="tool-name">
+                    Video Compressor
+                </div>
+
+                <div class="tool-desc">
+                    Kurangi ukuran video
+                    dengan resolusi tetap
+                    dipertahankan.
+                </div>
+
+                <span class="badge">
+                    COMPRESS · HD
+                </span>
+
+            </div>
+
+
+            <div class="arrow">
+                ›
+            </div>
+
+        </a>
+
+
+    </div>
+
+
+    <div class="footer">
+        Zetss Tools · Made for simple media tasks
+    </div>
+
+</div>
+
+</body>
+
+</html>
+"""
+
+@app.route("/tiktok-downloader")
+def tiktok_downloader():
 
     return render_template_string(
         """
@@ -2187,7 +2574,7 @@ def preview():
 
         <a
             class="back"
-            href="/"
+            href="/tiktok-downloader"
         >
             ← Masukkan link lain
         </a>
@@ -3342,7 +3729,7 @@ h1 {
         class="back"
         href="/"
     >
-        ← Kembali ke TikTok Downloader
+        ← Kembali ke Home
     </a>
 
 </div>
